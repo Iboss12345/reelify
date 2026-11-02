@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reelify</title>
+  <meta name="description" content="Upload photos and clips, get a viral-style reel.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="logo">▶</span> Reelify</div>
+    <p class="tag">Drop in your photos &amp; clips. Get a scroll-stopping reel.</p>
+  </header>
+
+  <main class="layout">
+    <section class="panel controls">
+      <div class="step">
+        <h2><span>1</span> Upload</h2>
+        <label id="drop" class="drop">
+          <input id="files" type="file" accept="image/*,video/*" multiple hidden>
+          <strong>Drop photos &amp; videos here</strong>
+          <small>or click to choose · up to 30</small>
+        </label>
+        <ul id="thumbs" class="thumbs"></ul>
+        <p class="hint" id="thumbHint" hidden>Drag to reorder. In AI modes the most eye-catching shot is moved first.</p>
+      </div>
+
+      <div class="step">
+        <h2><span>2</span> Style</h2>
+        <div class="tabs">
+          <button data-mode="auto" class="active">✨ AI picks</button>
+          <button data-mode="describe">✍️ Describe it</button>
+          <button data-mode="pick">🧩 Template</button>
+        </div>
+        <div class="tabpane" data-pane="auto">
+          <p class="hint">The AI director looks at your media (how many, photos vs clips, colours, orientation) and picks the viral format that fits best.</p>
+        </div>
+        <div class="tabpane" data-pane="describe" hidden>
+          <textarea id="describe" rows="3" placeholder='e.g. fast hype edit with flash transitions, vintage look, caption "summer was unreal"'></textarea>
+          <p class="hint">Try words like: fast, slow, cinematic, glitch, polaroid, before after, top 5, vintage, black and white, warm, smooth. Put your caption in "quotes".</p>
+        </div>
+        <div class="tabpane" data-pane="pick" hidden>
+          <div id="tplGrid" class="tplgrid"></div>
+        </div>
+      </div>
+
+      <div class="step">
+        <h2><span>3</span> Text &amp; sound</h2>
+        <label class="field">Hook text (top of video)
+          <input id="hook" placeholder="Leave empty and the AI writes it">
+        </label>
+        <label class="field">Ending text
+          <input id="outro" placeholder='Optional, e.g. "follow for part 2"'>
+        </label>
+        <div class="field">Music
+          <div class="seg">
+            <label><input type="radio" name="music" value="beat" checked> AI beat</label>
+            <label><input type="radio" name="music" value="song"> My song</label>
+            <label><input type="radio" name="music" value="none"> Silent</label>
+          </div>
+          <div id="songRow" class="songrow" hidden>
+            <input id="songFile" type="file" accept="audio/*">
+            <label>Start at <input id="songOffset" type="number" min="0" step="0.5" value="0"> sec</label>
+          </div>
+        </div>
+      </div>
+
+      <button id="generate" class="btn primary big" disabled>✨ Generate video</button>
+    </section>
+
+    <section class="panel preview">
+      <div class="phone">
+        <canvas id="stage"></canvas>
+        <div id="empty" class="empty">Your video appears here</div>
+      </div>
+      <div class="actions">
+        <button id="play" class="btn" disabled>▶ Play</button>
+        <button id="remix" class="btn" disabled>🎲 Remix</button>
+        <button id="export" class="btn primary" disabled>⬇ Download</button>
+      </div>
+      <div id="progress" class="progress" hidden>
+        <div class="bar"><div></div></div>
+        <span>Recording… keep this tab open and visible</span>
+      </div>
+      <div id="notes" class="notes" hidden></div>
+    </section>
+  </main>
+
+  <div id="media-pool" aria-hidden="true"></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="js/templates.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
