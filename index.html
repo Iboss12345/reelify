@@ -36,6 +36,7 @@
           <label class="field">Pictures
             <select id="imageSource">
               <option value="ai">🎨 AI-generated to match your story (free Puter sign-in)</option>
+              <option value="video">🎬 AI video clips: real motion (slow, uses lots of Puter credits)</option>
               <option value="stock">📷 Real stock photos (no sign-in, best for places/food/things)</option>
             </select>
           </label>
@@ -53,6 +54,7 @@
           <button data-mode="describe">✍️ Describe style</button>
           <button data-mode="pick">🧩 Template</button>
         </div>
+        <label class="check"><input type="checkbox" id="depthAI" checked> 🧠 3D depth AI: machine learning makes photos move in real 3D (free, ~27 MB download the first time)</label>
         <div class="tabpane" data-pane="auto">
           <p class="hint">The AI director looks at your media (how many, photos vs clips, colours, orientation) and picks the viral format that fits best. With "Just describe it" there's no preset: the AI designs a custom edit (timing, camera, transitions, colour, music, beat drop) only from your description.</p>
         </div>
@@ -143,6 +145,7 @@
   <script src="js/music.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/creator.js"></script>
+  <script src="js/depth.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

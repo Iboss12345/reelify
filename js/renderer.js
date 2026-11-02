@@ -184,6 +184,19 @@ window.Renderer = (function () {
       c.filter = grade;
       c.shadowColor = 'rgba(0,0,0,0.6)'; c.shadowBlur = 30;
       drawFit(c, m, 0, 0, W, H, false);
+    } else if (m.layers && !m.layers.off) {
+      // Real 3D (depth from the ML model): near layers move more than far ones.
+      const Ls = m.layers, n = Ls.length - 1, lw = Ls[0].width, lh = Ls[0].height;
+      const base = Math.max(W / lw, H / lh) * 1.06, e = easeInOut(p);
+      let px = 0, py = 0, pz = 0.16 * e;
+      if (seg.move === 'pan' || seg.move === 'drift' || seg.move === 'tilt') { px = dir * 80 * (e - 0.5); pz = 0.05 * e; }
+      if (seg.move === 'rise') { py = 70 * (0.5 - e); pz = 0.05 * e; }
+      if (seg.move === 'pullback') pz = 0.16 * (1 - e);
+      c.filter = grade;
+      Ls.forEach((L, k) => {
+        const f = k / n, s = base * (1 + pz * (0.25 + f));
+        c.drawImage(L, W / 2 - (lw * s) / 2 + px * f, H / 2 - (lh * s) / 2 + py * f, lw * s, lh * s);
+      });
     } else if (seg.depth) {
       // Fake 3D: soft background drifts one way, sharp centre pops forward the other way.
       c.save();

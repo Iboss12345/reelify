@@ -150,6 +150,28 @@ Reply with JSON only: {"hook":"...","edit":{...},"shots":[{"prompt":"...","searc
     return canvasSafe(img.src);
   }
 
+  // Image-to-video: the AI picture for the shot becomes the first frame of a real moving clip.
+  async function aiClip(prompt, still, seconds) {
+    const c = document.createElement('canvas');
+    c.width = still.naturalWidth; c.height = still.naturalHeight;
+    c.getContext('2d').drawImage(still, 0, 0);
+    const opts = { seconds: Math.max(5, Math.ceil(seconds || 5)), size: '720x1280', input_reference: c.toDataURL('image/jpeg', 0.9) };
+    let vid;
+    try {
+      vid = await puter.ai.txt2vid(prompt, opts);
+    } catch (e) {
+      if (/insufficient_funds|402/i.test(JSON.stringify(e))) throw Object.assign(new Error('out of credits'), { credits: true });
+      throw e;
+    }
+    // Re-load from our own blob so the recorder is allowed to read the frames.
+    const blob = await (await fetch(String(vid.src || vid))).blob();
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    await new Promise((resolve, reject) => { v.onloadeddata = resolve; v.onerror = reject; v.src = URL.createObjectURL(blob); });
+    document.getElementById('media-pool').appendChild(v);
+    return v;
+  }
+
   async function searchCommons(query) {
     const params = new URLSearchParams({
       action: 'query', format: 'json', origin: '*',
@@ -198,9 +220,10 @@ Reply with JSON only: {"hook":"...","edit":{...},"shots":[{"prompt":"...","searc
     return out;
   }
 
-  // images: 'ai' | 'stock'
+  // images: 'video' | 'ai' | 'stock'
   async function create(idea, nShots, onStatus, images, lengthSec) {
-    const useAI = images === 'ai' && hasPuter() && puter.auth.isSignedIn();
+    const useAI = (images === 'ai' || images === 'video') && hasPuter() && puter.auth.isSignedIn();
+    let clipsOk = useAI && images === 'video';
     onStatus('✍️ AI is writing and editing the story…');
     let plan = null;
     for (const attempt of [useAI && puterShotList, pollinationsShotList]) {
@@ -213,21 +236,28 @@ Reply with JSON only: {"hook":"...","edit":{...},"shots":[{"prompt":"...","searc
     const fallback = localShotList(idea, 1).shots[0].search;
     let done = 0, aiOk = useAI;
     const total = plan.shots.length;
-    onStatus(useAI ? `🎨 Creating AI images 0/${total}…` : `🔎 Finding photos 0/${total}…`);
+    const label = clipsOk ? '🎬 Creating AI video clips (a few minutes)' : useAI ? '🎨 Creating AI images' : '🔎 Finding photos';
+    onStatus(`${label} 0/${total}…`);
     const results = await pool(plan.shots, useAI ? 3 : 6, async (shot) => {
       let r = null;
       if (aiOk) {
         try { r = { el: await aiImage(shot.prompt), ai: true }; } catch (e) { if (e.credits) aiOk = false; }
       }
+      if (r && clipsOk) {
+        try {
+          r = { el: await aiClip(shot.prompt, r.el, shot.sec), ai: true, video: true };
+        } catch (e) { if (e.credits) clipsOk = false; }
+      }
       if (!r) r = await stockPhoto(shot.search, used, fallback);
-      onStatus(`${useAI ? '🎨 Creating AI images' : '🔎 Finding photos'} ${++done}/${total}…`);
+      onStatus(`${label} ${++done}/${total}…`);
       return r && Object.assign(r, {
         caption: shot.caption, query: shot.search,
         shot: { sec: shot.sec, move: shot.move, trans: shot.trans, look: shot.look, drop: !!shot.drop },
       });
     });
     plan.photos = results.filter(Boolean);
-    plan.creditsRanOut = useAI && !aiOk;
+    plan.creditsRanOut = useAI && (!aiOk || (images === 'video' && !clipsOk));
+    plan.usedClips = plan.photos.some((p) => p.video);
     plan.usedAIImages = plan.photos.some((p) => p.ai);
     return plan;
   }

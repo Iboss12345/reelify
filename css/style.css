@@ -95,6 +95,8 @@ textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 
 .tplgrid button.active { border-color: var(--accent); background: rgba(255, 61, 127, .12); }
 
 .srcpane { margin-top: 12px; }
+.check { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }
 .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .row2 .field + .field { margin-top: 0; }
 select {
