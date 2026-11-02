@@ -123,6 +123,21 @@ window.TEMPLATES = [
   },
 ];
 
+// Extra hook lines so every Remix can say something different.
+const ALT_HOOKS = {
+  velocity: ['POV: you hit the *perfect* angle', 'speed was *never* the problem', 'watch till the *end*'],
+  beatdrop: ['it gets *better* every second', 'turn your *sound* on 🔊', 'this beat >>> *everything*'],
+  depth3d: ['this felt like a *movie*', 'pov: you live here *now*', 'save this for *later* 📌'],
+  flash: ['recent *favourites* 📸', 'camera roll *cleanout*', 'no context, just *vibes*'],
+  pov: ['POV: the plan *actually* worked', 'POV: you said *one* more trip', 'POV: main character *energy*'],
+  beforeafter: ['wait for the *after*', 'day 1 vs *now*', 'the *transformation* 😮'],
+  travel: ["tell me this isn't *real*", 'somewhere *worth* remembering', "i'd go back in a *heartbeat*"],
+  countdown: ['ranking my top {n} *ever*', 'number 1 will *shock* you', 'top {n}, no *skips*'],
+  glitch: ['main character *mode* ⚡', 'system *overload*', 'too much *aura* ⚡'],
+  aesthetic: ['soft days, slow *moments*', 'a quiet kind of *happy*', 'romanticise the *little* things'],
+};
+TEMPLATES.forEach((t) => { t.hooks = [t.hook].concat(ALT_HOOKS[t.id] || []); });
+
 window.Director = (function () {
   const DEFAULTS = {
     introBeats: 0, introMove: null, depth: false, pulse: null, dropTransition: null, clipSpeed: null,
@@ -132,7 +147,8 @@ window.Director = (function () {
   const clone = (t) => Object.assign({}, DEFAULTS, JSON.parse(JSON.stringify(t)));
 
   // Looks at the uploaded media and picks the template that fits best.
-  function autoPick(stats) {
+  // `exclude` lets Remix skip the template it used last time.
+  function autoPick(stats, exclude = []) {
     const score = {};
     const why = {};
     TEMPLATES.forEach((t) => { score[t.id] = 1 + Math.random() * 1.2; why[t.id] = []; });
@@ -170,7 +186,8 @@ window.Director = (function () {
       add('velocity', 1.5, 'Darker footage suits a moody velocity edit.');
     }
 
-    const best = TEMPLATES.slice().sort((a, b) => score[b.id] - score[a.id])[0];
+    const ranked = TEMPLATES.slice().sort((a, b) => score[b.id] - score[a.id]);
+    const best = ranked.find((t) => !exclude.includes(t.id)) || ranked[0];
     const reasons = why[best.id].length ? why[best.id] : ['A solid all-rounder for this mix of media.'];
     return { template: clone(best), reasons };
   }
@@ -189,7 +206,8 @@ window.Director = (function () {
     aesthetic: ['aesthetic', 'soft', 'dreamy', 'pastel', 'cozy', 'cosy', 'calm', 'chill', 'romantic', 'wedding', 'rewind'],
   };
 
-  function parseStyle(text, stats) {
+  // fallbackId: template to use when the text names no format (e.g. the AI's suggestion).
+  function parseStyle(text, stats, fallbackId) {
     const s = ' ' + text.toLowerCase() + ' ';
     // "no glitch" / "don't add shaky stuff" shouldn't count as asking for it.
     const negated = (w) => new RegExp(`\\b(no|not|don'?t|without|less)\\s+(\\w+\\s+){0,2}${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(s);
@@ -205,6 +223,9 @@ window.Director = (function () {
     if (bestId) {
       tpl = clone(byId(bestId));
       notes.push(`Your description sounds like a "${tpl.name}" edit, so I used that as the base.`);
+    } else if (fallbackId && byId(fallbackId)) {
+      tpl = clone(byId(fallbackId));
+      notes.push(`The AI director chose a "${tpl.name}" edit for this idea.`);
     } else {
       const pick = autoPick(stats);
       tpl = pick.template;

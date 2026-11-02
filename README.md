@@ -6,14 +6,16 @@ Everything runs in the browser: no server, no account, no cost.
 
 ## How to use
 1. Double-click `index.html` (open it in **Chrome or Edge**).
-2. Drop in photos/clips.
-3. Pick a style: **AI picks**, **Describe it** (e.g. `fast hype edit, vintage, "summer was unreal"`), or a **Template**.
-4. Press **Generate**, then **Download**. Keep the tab open while it records (it records in real time).
+2. Drop in photos/clips, **or** pick "Just describe it" and type your idea. A free AI writes a shot list and free photos are found on Wikimedia Commons.
+3. Optional: choose the video length and how long each photo shows.
+4. Pick a style: **AI picks**, **Describe it** (e.g. `fast hype edit, vintage, "summer was unreal"`), or a **Template**.
+5. Press **Generate**, then **Download**. Keep the tab open while it records (it records in real time).
 
 ## How it works
 - `js/templates.js`: 10 templates based on trending CapCut/Reels edit styles (Velocity, Beat Drop, 3D Photo Zoom, Photo Flash, POV, Glow Up, Cinematic, Top List, Glitch, Soft Aesthetic), the "AI director" that picks one from your media, and the free keyword-based style matcher.
 - `js/renderer.js`: plans the edit on the beat and draws it with a virtual camera: speed-ramp zooms, spin/whip/zoom transitions with real motion blur, fake 3D depth, beat pulses and shake, RGB split, glitch, light leaks, bloom, film grain, word-by-word captions. Then records the video.
 - `js/music.js`: generates a royalty-free track (EDM build + drop, phonk, pop, cinematic, lo-fi) with reverb and sidechain, locked to the cuts.
+- `js/creator.js`: "Just describe it" mode: AI shot list (free Pollinations text API, keyword fallback) + Wikimedia Commons photo search.
 - `js/app.js`: page controls.
 
 ## Notes

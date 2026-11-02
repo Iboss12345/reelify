@@ -7,7 +7,7 @@
 window.Renderer = (function () {
   const W = 720, H = 1280, FPS = 30;
   const FONT = '"Montserrat", "Arial Black", Arial, sans-serif';
-  const MIN_LEN = 6, MAX_LEN = 40;
+  const MIN_LEN = 6, MAX_LEN = 60;
   const SHUTTER = 1 / 40;
 
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -24,8 +24,16 @@ window.Renderer = (function () {
 
   // ---------- planning ----------
 
+  // opts: aiOrder, shuffle (remix), lengthSec (total video length), shotSec (time per photo),
+  //       hook, outro
   function buildPlan(media, tpl, opts = {}) {
     const items = media.slice();
+    if (opts.shuffle && tpl.labels !== 'beforeafter') {
+      for (let i = items.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+    }
     // Strongest hook first: open on the most eye-catching item.
     if (opts.aiOrder && tpl.labels !== 'beforeafter' && items.length > 2) {
       let best = 0;
@@ -34,14 +42,25 @@ window.Renderer = (function () {
     }
 
     const spb = 60 / tpl.bpm;
+    const intro = tpl.introBeats || 0;
+    const target = opts.lengthSec || null;
+    const canLoop = (target ? !tpl.labels : !tpl.labels && items.length > 2) && items.length > 0;
+    // Shot lengths stay on a half-beat grid so cuts still land on the music.
+    const toBeats = (sec) => Math.max(0.5, Math.round((sec / spb) * 2) / 2);
+    let shotBeats = opts.shotSec ? toBeats(opts.shotSec) : null;
+    if (target && (!shotBeats || !canLoop)) {
+      const n = Math.max(1, items.length - (intro ? 1 : 0));
+      shotBeats = toBeats(Math.max(spb, target - intro * spb) / n);
+    }
+    const minLen = target || MIN_LEN, maxLen = target || MAX_LEN;
+
     const segs = [];
     let t = 0, lastTrans = null;
-    const canLoop = !tpl.labels && items.length > 2;
-    for (let i = 0; i < items.length || (canLoop && t < MIN_LEN); i++) {
-      if (t >= MAX_LEN) break;
+    for (let i = 0; i < items.length || (canLoop && t < minLen); i++) {
+      if (t >= maxLen - 0.05) break;
       const m = items[i % items.length];
       const first = i === 0;
-      const beats = first && tpl.introBeats ? tpl.introBeats : m.type === 'video' ? tpl.videoBeats : tpl.beats;
+      const beats = first && intro ? intro : shotBeats || (m.type === 'video' ? tpl.videoBeats : tpl.beats);
       const dur = beats * spb;
       let offset = 0;
       if (m.type === 'video' && m.duration > dur + 0.3) offset = Math.min(m.duration * 0.15, m.duration - dur - 0.1);
@@ -60,8 +79,13 @@ window.Renderer = (function () {
       });
       t += dur;
     }
-    // Too short and can't loop (e.g. 1–2 items): stretch the last shot to whole beats.
-    if (t < MIN_LEN && segs.length) {
+    if (target && segs.length) {
+      // Hit the chosen length exactly: drop slivers, then stretch or trim the last shot.
+      while (segs.length > 1 && segs[segs.length - 1].dur + (target - t) < 0.3) t -= segs.pop().dur;
+      segs[segs.length - 1].dur += target - t;
+      t = target;
+    } else if (t < MIN_LEN && segs.length) {
+      // Too short and can't loop (e.g. 1–2 items): stretch the last shot to whole beats.
       const extra = Math.ceil((MIN_LEN - t) / spb) * spb;
       segs[segs.length - 1].dur += extra;
       t += extra;
@@ -140,7 +164,7 @@ window.Renderer = (function () {
       c.clip();
       c.filter = grade;
       drawFit(c, m, -innerW / 2, -ch / 2 + pad, innerW, innerH, true);
-    } else if (sw > sh * 1.1) {
+    } else if (sw > sh * 1.1 && !m.cover) {
       // Landscape media: blurred fill behind, whole shot in front.
       blurredBackdrop(c, m, grade, 0.3);
       c.filter = grade;
