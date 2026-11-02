@@ -11,9 +11,9 @@ Everything runs in the browser: no server, no account, no cost.
 4. Press **Generate**, then **Download**. Keep the tab open while it records (it records in real time).
 
 ## How it works
-- `js/templates.js`: 8 templates based on popular Reel formats (Beat Drop, POV, Photo Dump, Before/After, Cinematic, Top List, Glitch, Soft Aesthetic), the "AI director" that picks one from your media, and the free keyword-based style matcher.
-- `js/renderer.js`: plans the edit on the beat, draws frames (motion, transitions, colour grade, text) and records the video.
-- `js/music.js`: generates a royalty-free beat that matches the cuts.
+- `js/templates.js`: 10 templates based on trending CapCut/Reels edit styles (Velocity, Beat Drop, 3D Photo Zoom, Photo Flash, POV, Glow Up, Cinematic, Top List, Glitch, Soft Aesthetic), the "AI director" that picks one from your media, and the free keyword-based style matcher.
+- `js/renderer.js`: plans the edit on the beat and draws it with a virtual camera: speed-ramp zooms, spin/whip/zoom transitions with real motion blur, fake 3D depth, beat pulses and shake, RGB split, glitch, light leaks, bloom, film grain, word-by-word captions. Then records the video.
+- `js/music.js`: generates a royalty-free track (EDM build + drop, phonk, pop, cinematic, lo-fi) with reverb and sidechain, locked to the cuts.
 - `js/app.js`: page controls.
 
 ## Notes
