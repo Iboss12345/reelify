@@ -102,18 +102,15 @@
         <label class="field">Ending text
           <input id="outro" placeholder='Optional, e.g. "follow for part 2"'>
         </label>
-        <div class="field">Music
-          <div class="seg">
-            <label><input type="radio" name="music" value="ai"> 🧠 AI-composed</label>
-            <label><input type="radio" name="music" value="beat" checked> Quick beat</label>
-            <label><input type="radio" name="music" value="song"> My song</label>
-            <label><input type="radio" name="music" value="none"> Silent</label>
-          </div>
-          <p class="hint" id="aiMusicHint" hidden>A real music AI (MusicGen) composes a new track that fits your video. Free, but the first time it downloads ~600 MB, and composing takes a few minutes. Best on a computer.</p>
-          <div id="songRow" class="songrow" hidden>
-            <input id="songFile" type="file" accept="audio/*">
+        <div class="field">Soundtrack
+          <select id="soundtrack"></select>
+          <div class="songrow" id="songTools">
+            <button id="songPreview" class="btn small" type="button">▶ Listen</button>
             <label>Start at <input id="songOffset" type="number" min="0" step="0.5" value="0"> sec</label>
+            <button id="songRemove" class="btn small" type="button" hidden>🗑 Remove song</button>
           </div>
+          <input id="songFile" type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" multiple hidden>
+          <p class="hint" id="songHint"></p>
         </div>
       </div>
 
@@ -150,6 +147,7 @@
   <script src="js/creator.js"></script>
   <script src="js/depth.js"></script>
   <script src="js/composer.js"></script>
+  <script src="js/songs.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

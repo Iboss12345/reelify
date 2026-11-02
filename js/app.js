@@ -304,29 +304,109 @@
     grid.appendChild(b);
   });
 
-  const musicMode = () => $('input[name=music]:checked').value;
-  $$('input[name=music]').forEach((r) => {
-    r.onchange = () => {
-      $('#songRow').hidden = musicMode() !== 'song';
-      $('#aiMusicHint').hidden = musicMode() !== 'ai';
-    };
-  });
+  // ---------- soundtrack ----------
+  // Values: 'auto' | 'song:<id>' (meme song or one of mine) | 'add' | 'ai' | 'beat' | 'none'
 
-  $('#songFile').onchange = (e) => {
-    const f = e.target.files[0];
-    if (!f) return;
-    if (state.song) state.song.el.pause();
-    state.song = { el: new Audio(URL.createObjectURL(f)), offset: 0 };
+  const sound = $('#soundtrack');
+  let mySongs = [], lastSound = 'auto', previewEl = null;
+  const musicMode = () => (sound.value.startsWith('song:') ? 'song' : sound.value);
+  const findSong = (id) => Songs.byId(id) || mySongs.find((s) => s.id === id);
+
+  function opt(parent, value, text) {
+    const o = document.createElement('option');
+    o.value = value; o.textContent = text;
+    parent.appendChild(o);
+  }
+  function renderSoundtracks(select) {
+    sound.innerHTML = '';
+    opt(sound, 'auto', '✨ Auto: picks a meme song that fits your video');
+    const memes = document.createElement('optgroup');
+    memes.label = '😂 Meme songs (free to post, credit included)';
+    Songs.LIBRARY.forEach((s) => opt(memes, `song:${s.id}`, `${s.mood} · ${s.title}`));
+    const mine = document.createElement('optgroup');
+    mine.label = '📁 My songs (saved in this browser)';
+    mySongs.forEach((s) => opt(mine, `song:${s.id}`, `🎵 ${s.title}`));
+    opt(mine, 'add', '➕ Add songs from my device…');
+    const ai = document.createElement('optgroup');
+    ai.label = '🧠 Made by AI';
+    opt(ai, 'ai', 'AI-composed track (MusicGen: ~600 MB first time, takes minutes)');
+    opt(ai, 'beat', 'Quick beat (instant, hits on every cut)');
+    sound.append(memes, mine, ai);
+    opt(sound, 'none', '🔇 Silent');
+    sound.value = select || lastSound;
+    if (sound.value !== (select || lastSound)) sound.value = 'auto';
+    soundChanged();
+  }
+
+  function soundChanged() {
+    stopPreview();
+    if (sound.value === 'add') { sound.value = lastSound; $('#songFile').click(); return; }
+    lastSound = sound.value;
+    const mode = musicMode(), song = mode === 'song' && findSong(sound.value.slice(5));
+    $('#songTools').hidden = mode !== 'song';
+    $('#songRemove').hidden = !(song && song.mine);
+    $('#songHint').textContent = {
+      auto: 'Picks from the meme songs below based on your video. Remix tries another one.',
+      song: song && !song.mine ? `${song.mood}. The video's cuts are timed to this song's beat.` : "The video's cuts are timed to your song's beat.",
+      ai: 'A music AI composes a new track for your video. Free, but big the first time. Best on a computer.',
+      beat: 'A simple synth beat made in your browser.',
+      none: '',
+    }[mode] || '';
+  }
+  sound.onchange = soundChanged;
+
+  function stopPreview() {
+    if (previewEl) previewEl.pause();
+    previewEl = null;
+    $('#songPreview').textContent = '▶ Listen';
+  }
+  $('#songPreview').onclick = () => {
+    if (previewEl) { stopPreview(); return; }
+    const song = findSong(sound.value.slice(5));
+    if (!song) return;
+    previewEl = new Audio(song.url);
+    previewEl.currentTime = parseFloat($('#songOffset').value) || 0;
+    previewEl.play().catch(() => {});
+    previewEl.onended = stopPreview;
+    $('#songPreview').textContent = '■ Stop';
   };
+
+  $('#songFile').onchange = async (e) => {
+    const files = Array.from(e.target.files);
+    e.target.value = '';
+    let last = null;
+    for (const f of files) {
+      last = await Songs.add(f);
+      mySongs.push(last);
+    }
+    if (last) { renderSoundtracks(`song:${last.id}`); toast(`Added ${files.length > 1 ? `${files.length} songs` : `"${last.title}"`}. They stay saved in this browser.`); }
+  };
+  $('#songRemove').onclick = async () => {
+    const id = sound.value.slice(5);
+    await Songs.remove(id);
+    mySongs = mySongs.filter((s) => s.id !== id);
+    renderSoundtracks('auto');
+  };
+  renderSoundtracks('auto');
+  Songs.saved().then((list) => { mySongs = list; renderSoundtracks(lastSound); });
+
+  // Which song plays this time (Auto ranks the meme songs for the idea; Remix moves down the list).
+  let autoTurn = 0;
+  function pickSong(tpl, remix) {
+    const mode = musicMode();
+    if (mode === 'song') return findSong(sound.value.slice(5));
+    if (mode !== 'auto') return null;
+    const text = [state.source === 'describe' ? state.foundFor : '', $('#describe').value, tpl.name, tpl.desc,
+      media().map((m) => m.caption || '').join(' ')].join(' ');
+    autoTurn = remix ? autoTurn + 1 : 0;
+    const ranked = Songs.rank(text, tpl.energy || (tpl.bpm >= 125 ? 'high' : tpl.bpm <= 95 ? 'low' : 'medium'));
+    return ranked[autoTurn % 4]; // stay among the best few matches
+  }
 
   function audioOpts() {
     const mode = musicMode();
-    if (mode === 'ai') return state.aiSong ? { song: state.aiSong } : { music: true };
-    if (mode === 'song') {
-      if (!state.song) { toast('Choose a song file, or switch music to "AI beat".'); return { music: false }; }
-      state.song.offset = parseFloat($('#songOffset').value) || 0;
-      return { song: state.song };
-    }
+    if (state.song) return { song: state.song }; // its start is already snapped to the beat
+    if (mode === 'ai') return { music: true }; // composer failed: quick beat instead
     return { music: mode === 'beat' };
   }
 
@@ -409,6 +489,19 @@
     }
     if (hook && tpl.hookMode === 'none') tpl.hookMode = 'intro';
 
+    // Song: detect its beat first so the edit's cuts are planned on it.
+    state.song = null;
+    const song = pickSong(tpl, remix);
+    if (song) {
+      state.busy = true; updateButtons(); status('🎵 Finding the beat in the song…');
+      try {
+        state.song = await Songs.prepare(song, parseFloat($('#songOffset').value) || 0, tpl);
+      } catch (e) {
+        console.warn(e);
+        toast("Couldn't read that song file, so it's using the quick beat.");
+      } finally { state.busy = false; status(''); updateButtons(); }
+    }
+
     await Promise.all([500, 700, 800, 900].map((w) => document.fonts.load(`${w} 40px Montserrat`))).catch(() => {});
     state.plan = Renderer.buildPlan(list, tpl, {
       // Described stories keep their order.
@@ -423,11 +516,10 @@
     state.lastHook = state.plan.hook;
 
     // Machine-learning music, composed for this edit's style and length.
-    state.aiSong = null;
     if (musicMode() === 'ai') {
       state.busy = true; updateButtons();
       try {
-        state.aiSong = await Composer.compose(tpl, state.plan.total, status);
+        state.song = await Composer.compose(tpl, state.plan.total, status);
       } catch (e) {
         console.warn(e);
         toast("The AI composer couldn't run in this browser, so it's using the quick beat.");
@@ -445,9 +537,12 @@
     if (useLayers && list.some((m) => m.layers && !m.layers.off)) {
       reasons.push('🧠 Machine learning measured the depth in every photo, so the camera moves through it in real 3D.');
     }
-    if (state.aiSong) reasons.push(`🎵 Music composed by AI: "${Composer.promptFor(tpl)}".`);
+    if (state.song && state.song.ai) reasons.push(`🎵 Music composed by AI: "${Composer.promptFor(tpl)}".`);
+    if (state.song && state.song.title) {
+      reasons.push(`🎵 Song: "${state.song.title}" (${Math.round(state.song.bpm)} BPM). Cuts are timed to its beat.`);
+    }
     if (tpl.id === 'custom') {
-      reasons.push(`Style: ${tpl.music} at ${tpl.bpm} BPM · look: ${tpl.lookName} · energy: ${tpl.energy}.`);
+      reasons.push(`Style: ${tpl.music} at ${Math.round(tpl.bpm)} BPM · look: ${tpl.lookName} · energy: ${tpl.energy}.`);
       if (state.plan.dropTime != null) reasons.push(`The beat builds up and drops at ${state.plan.dropTime.toFixed(1)}s, where the story turns.`);
     }
     renderNotes(reasons);
@@ -463,7 +558,7 @@
     h.textContent = `${t.emoji} ${t.name}`;
     const meta = document.createElement('div');
     meta.className = 'meta';
-    meta.textContent = `${p.segs.length} shots · ${p.total.toFixed(1)}s · ${t.bpm} BPM`;
+    meta.textContent = `${p.segs.length} shots · ${p.total.toFixed(1)}s · ${Math.round(t.bpm)} BPM`;
     const ul = document.createElement('ul');
     reasons.forEach((r) => { const li = document.createElement('li'); li.textContent = r; ul.appendChild(li); });
     if (p.hook && t.hookMode !== 'none') {
@@ -482,6 +577,12 @@
         a.textContent = m.credit.title;
         c.append(a, i < credited.length - 1 ? ' · ' : '');
       });
+      el.append(c);
+    }
+    if (state.song && state.song.credit) {
+      const c = document.createElement('div');
+      c.className = 'credits';
+      c.textContent = `Music credit (paste this in your post): ${state.song.credit}`;
       el.append(c);
     }
     el.hidden = false;

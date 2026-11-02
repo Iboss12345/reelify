@@ -22,3 +22,6 @@ Everything runs in the browser: no server, no account, no cost.
 - Instagram doesn't allow apps to search for or download trending videos, so the templates are built in instead of scraped.
 - Chrome/Edge save `.mp4`. Some other browsers only save `.webm`.
 - iPhone HEIC photos need to be saved as JPG first.
+
+## Music credits
+The meme songs in `music/` are by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0. The site shows the credit line to paste into a post. Songs users add are saved only in their own browser (IndexedDB).
