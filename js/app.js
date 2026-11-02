@@ -58,9 +58,15 @@
     return m;
   }
 
+  // Some files (and drags from other apps) arrive without a type, so fall back to the extension.
+  const IMAGE_EXT = /\.(jpe?g|jfif|png|webp|gif|bmp|avif)$/i;
+  const VIDEO_EXT = /\.(mp4|mov|m4v|webm|ogv)$/i;
+  const isImage = (f) => f.type.startsWith('image/') || (!f.type && IMAGE_EXT.test(f.name));
+  const isVideo = (f) => f.type.startsWith('video/') || (!f.type && VIDEO_EXT.test(f.name));
+
   function loadMedia(file) {
     const url = URL.createObjectURL(file);
-    if (file.type.startsWith('image/')) {
+    if (isImage(file)) {
       return new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(analyse({ type: 'image', el: img, url, name: file.name }));
@@ -85,7 +91,7 @@
   async function addFiles(files) {
     for (const f of files) {
       if (state.uploads.length >= MAX_FILES) { toast(`Max ${MAX_FILES} files.`); break; }
-      if (!/^(image|video)\//.test(f.type) && !/\.(heic|heif)$/i.test(f.name)) continue;
+      if (!isImage(f) && !isVideo(f) && !/\.(heic|heif)$/i.test(f.name)) continue;
       try {
         state.uploads.push(await loadMedia(f));
       } catch (e) {
@@ -159,6 +165,8 @@
       li.ondragover = (e) => e.preventDefault();
       li.ondrop = (e) => {
         e.preventDefault();
+        e.stopPropagation(); // don't let the page treat this as a new file drop
+        if (dragIdx == null) { useUploadTab(); addFiles(Array.from(e.dataTransfer.files)); return; }
         if (dragIdx == null || dragIdx === i) return;
         list.splice(i, 0, list.splice(dragIdx, 1)[0]);
         dragIdx = null;
@@ -171,15 +179,49 @@
     updateButtons();
   }
 
+  // Pictures dragged from another website: only works if that site allows it (CORS).
+  function addFromUrl(url) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          state.uploads.push(analyse({ type: 'image', el: img, url, name: 'web image' }));
+          renderThumbs();
+        } catch (e) { img.onerror(); }
+        resolve();
+      };
+      img.onerror = () => {
+        toast("That website doesn't let other sites use its picture. Save it to your computer first, then drag it in.");
+        resolve();
+      };
+      img.src = url;
+    });
+  }
+
+  function useUploadTab() {
+    if (state.source !== 'upload') $('#sourceTabs button[data-source=upload]').click();
+  }
+
+  // The whole page accepts drops, not just the dashed box.
   const drop = $('#drop');
   $('#files').onchange = (e) => { addFiles(Array.from(e.target.files)); e.target.value = ''; };
-  window.addEventListener('dragover', (e) => e.preventDefault());
-  window.addEventListener('drop', (e) => e.preventDefault());
-  drop.addEventListener('dragover', () => drop.classList.add('over'));
-  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
-  drop.addEventListener('drop', (e) => {
+  const isExternalDrag = (e) => Array.from(e.dataTransfer.types).some((t) => t === 'Files' || t === 'text/uri-list');
+  window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (dragIdx == null && isExternalDrag(e)) drop.classList.add('over');
+  });
+  window.addEventListener('dragleave', (e) => { if (!e.relatedTarget) drop.classList.remove('over'); });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
     drop.classList.remove('over');
-    if (e.dataTransfer.files.length) addFiles(Array.from(e.dataTransfer.files));
+    if (dragIdx != null) return; // reordering thumbnails
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length) { useUploadTab(); addFiles(files); return; }
+    const html = e.dataTransfer.getData('text/html');
+    const src = (html.match(/<img[^>]+src="([^"]+)"/i) || [])[1];
+    const url = src || e.dataTransfer.getData('text/uri-list').split('\n')[0].trim();
+    if (/^(https?:|data:image)/.test(url)) { useUploadTab(); addFromUrl(url.replace(/&amp;/g, '&')); }
   });
 
   $$('#sourceTabs button').forEach((b) => {
