@@ -26,16 +26,19 @@ window.Renderer = (function () {
 
   // opts: aiOrder, shuffle (remix), lengthSec (total video length), shotSec (time per photo),
   //       hook, outro
+  // A "story" template (custom edit) keeps the shot order and uses each item's own m.shot
+  // { sec, move, trans, grade, drop } as planned by the AI.
   function buildPlan(media, tpl, opts = {}) {
     const items = media.slice();
-    if (opts.shuffle && tpl.labels !== 'beforeafter') {
+    const story = !!tpl.story;
+    if (opts.shuffle && !story && tpl.labels !== 'beforeafter') {
       for (let i = items.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [items[i], items[j]] = [items[j], items[i]];
       }
     }
     // Strongest hook first: open on the most eye-catching item.
-    if (opts.aiOrder && tpl.labels !== 'beforeafter' && items.length > 2) {
+    if (opts.aiOrder && !story && tpl.labels !== 'beforeafter' && items.length > 2) {
       let best = 0;
       items.forEach((m, i) => { if (m.score > items[best].score) best = i; });
       if (best > 0) items.unshift(items.splice(best, 1)[0]);
@@ -44,11 +47,15 @@ window.Renderer = (function () {
     const spb = 60 / tpl.bpm;
     const intro = tpl.introBeats || 0;
     const target = opts.lengthSec || null;
-    const canLoop = (target ? !tpl.labels : !tpl.labels && items.length > 2) && items.length > 0;
+    const canLoop = !story && (target ? !tpl.labels : !tpl.labels && items.length > 2) && items.length > 0;
     // Shot lengths stay on a half-beat grid so cuts still land on the music.
     const toBeats = (sec) => Math.max(0.5, Math.round((sec / spb) * 2) / 2);
     let shotBeats = opts.shotSec ? toBeats(opts.shotSec) : null;
-    if (target && (!shotBeats || !canLoop)) {
+    // Story: each shot's own length (or the chosen per-photo time), stretched to fit the chosen length.
+    const storySec = (m) => opts.shotSec || (m.shot && m.shot.sec) || tpl.beats * spb;
+    const storyScale = story && target ? target / items.reduce((a, m) => a + storySec(m), 0) : 1;
+    const shotOf = (m) => (story && m.shot) || {};
+    if (target && !story && (!shotBeats || !canLoop)) {
       const n = Math.max(1, items.length - (intro ? 1 : 0));
       shotBeats = toBeats(Math.max(spb, target - intro * spb) / n);
     }
@@ -60,22 +67,27 @@ window.Renderer = (function () {
       if (t >= maxLen - 0.05) break;
       const m = items[i % items.length];
       const first = i === 0;
-      const beats = first && intro ? intro : shotBeats || (m.type === 'video' ? tpl.videoBeats : tpl.beats);
+      const shot = shotOf(m);
+      const beats = story ? toBeats(storySec(m) * storyScale)
+        : first && intro ? intro : shotBeats || (m.type === 'video' ? tpl.videoBeats : tpl.beats);
       const dur = beats * spb;
       let offset = 0;
       if (m.type === 'video' && m.duration > dur + 0.3) offset = Math.min(m.duration * 0.15, m.duration - dur - 0.1);
 
       let trans = null;
       if (!first) {
-        if (i === 1 && tpl.introBeats && tpl.dropTransition) trans = tpl.dropTransition;
+        if (shot.drop && tpl.dropTransition) trans = tpl.dropTransition;
+        else if (shot.trans && tpl.followShots) trans = shot.trans;
+        else if (i === 1 && tpl.introBeats && tpl.dropTransition) trans = tpl.dropTransition;
         else trans = pick(tpl.transitions.filter((x) => x !== lastTrans).concat(tpl.transitions.length === 1 ? tpl.transitions : []));
         lastTrans = trans;
       }
       segs.push({
         m, start: t, dur, idx: i, offset, seed: Math.random(), trans,
-        move: first && tpl.introMove ? tpl.introMove : pick(tpl.moves),
+        move: shot.move && tpl.followShots ? shot.move : first && tpl.introMove ? tpl.introMove : pick(tpl.moves),
         depth: tpl.depth === 'all' || (tpl.depth === 'intro' && first),
-        grade: tpl.labels === 'beforeafter' && first ? 'grayscale(0.75) brightness(0.9) contrast(0.95)' : tpl.grade,
+        grade: shot.grade || (tpl.labels === 'beforeafter' && first ? 'grayscale(0.75) brightness(0.9) contrast(0.95)' : tpl.grade),
+        drop: !first && !!shot.drop,
       });
       t += dur;
     }
@@ -91,10 +103,12 @@ window.Renderer = (function () {
       t += extra;
     }
 
+    // Story beat drop: the music builds up and hits on the shot the AI marked (e.g. the reveal).
+    const dropSeg = segs.find((s) => s.drop);
     return {
       tpl, segs, spb, total: t, count: items.length,
-      introBeats: tpl.introBeats || 0,
-      dropTime: tpl.introBeats && segs.length > 1 ? segs[1].start : null,
+      introBeats: dropSeg ? dropSeg.start / spb : tpl.introBeats || 0,
+      dropTime: dropSeg ? dropSeg.start : tpl.introBeats && segs.length > 1 ? segs[1].start : null,
       hook: (opts.hook || tpl.hook || '').replace('{n}', items.length),
       outro: opts.outro != null ? opts.outro : tpl.outro,
     };

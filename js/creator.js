@@ -23,19 +23,35 @@ window.Creator = (function () {
 
   // ---------- shot list ----------
 
-  function shotPrompt(idea, nShots) {
-    const templates = TEMPLATES.map((t) => `${t.id}: ${t.desc}`).join('\n');
-    return `You are directing a viral vertical Instagram Reel made from ${nShots} still images.
+  // The AI designs the whole edit from the description (no preset template): pacing, camera,
+  // transitions, colour, music and where the beat drops.
+  function shotPrompt(idea, nShots, lengthSec) {
+    const timing = lengthSec
+      ? `The shot "seconds" must add up to about ${lengthSec}.`
+      : 'Pick "seconds" to fit the mood: 0.4-0.8 for fast montage moments, 1.5-3 for moments that need to land.';
+    return `You are a professional short-form video editor making a vertical Instagram Reel from ${nShots} still images.
 Video idea: "${idea}"
-1. Pick the best template id from:
-${templates}
-2. Write a scroll-stopping hook (max 8 words, wrap the key word in *stars*).
+Design the edit ONLY from this idea: pacing, camera, transitions, colour and music must follow its story and mood.
+1. "hook": scroll-stopping opening text (max 8 words, wrap the key word in *stars*), or "" if text would hurt it.
+2. "edit": the overall style:
+   - "energy": low | medium | high
+   - "music": drop (EDM build and drop) | phonk (dark, hard) | pop (upbeat) | cinematic (epic drums) | dreamy (lo-fi)
+   - "bpm": 70-150
+   - "look": natural | vivid | dark | bw | vintage | warm | cool | cinematic | dreamy
+   - "layout": full | letterbox
+   - "textStyle": outline | box | minimal | big | cinema
+   - "fx": any of bloom, grain, vignette, glow, rgb, rgbMotion, glitch
 3. If there is a main character, describe them once in detail (age, build, hair, clothes) and repeat that exact description inside every image prompt so they look the same in every shot.
-4. Write exactly ${nShots} shots that tell the story in order. For each shot:
+4. "shots": exactly ${nShots} shots that tell the story in order. For each shot:
    - "prompt": a detailed image-generation prompt (subject, action, setting, lighting, camera angle), ending with "photorealistic, vertical 9:16 photo"
    - "search": 2-4 plain words to find a similar stock photo
-   - "caption": on-screen story text, max 6 words (e.g. "day 1", "they laughed at me")
-Reply with JSON only: {"template":"id","hook":"...","shots":[{"prompt":"...","search":"...","caption":"..."}]}`;
+   - "caption": on-screen story text, max 6 words (e.g. "day 1", "they laughed at me"), or "" for none
+   - "seconds": how long the shot stays on screen. ${timing}
+   - "move": camera move: drift | pullback | pan | rise | tilt | velocity (slow creep then hard zoom) | punch (impact zoom) | still
+   - "transition": how this shot comes in: cut | zoom | spin | whip | whipUp | flash | flare | shake | glitch | dissolve
+   - "look": colour for this shot, same options as above (e.g. dark for sad moments, vivid for the payoff)
+   - "drop": true on the ONE shot where the story turns or pays off (the beat drops there), otherwise false
+Reply with JSON only: {"hook":"...","edit":{...},"shots":[{"prompt":"...","search":"...","caption":"...","seconds":1.5,"move":"...","transition":"...","look":"...","drop":false}]}`;
   }
 
   function parseShotList(txt, nShots) {
@@ -47,29 +63,37 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"prompt":"...","se
         prompt: String(s.prompt || s.search),
         search: String(s.search || s.prompt).split(/\s+/).slice(0, 5).join(' '),
         caption: s.caption ? String(s.caption).slice(0, 60) : '',
+        sec: +s.seconds > 0 ? Math.max(0.3, Math.min(6, +s.seconds)) : null,
+        move: s.move || null,
+        trans: s.transition || null,
+        look: s.look || null,
+        drop: s.drop === true,
       }));
     if (!shots.length) throw new Error('empty shot list');
+    // Only one drop, and never on the first shot.
+    let dropped = false;
+    shots.forEach((s, i) => { s.drop = s.drop && i > 0 && !dropped; dropped = dropped || s.drop; });
     return {
-      templateId: TEMPLATES.some((t) => t.id === json.template) ? json.template : null,
+      edit: json.edit && typeof json.edit === 'object' ? json.edit : {},
       hook: typeof json.hook === 'string' ? json.hook.slice(0, 80) : null,
       shots,
     };
   }
 
-  async function puterShotList(idea, nShots) {
-    const res = await puter.ai.chat(shotPrompt(idea, nShots));
+  async function puterShotList(idea, nShots, lengthSec) {
+    const res = await puter.ai.chat(shotPrompt(idea, nShots, lengthSec));
     let content = res && res.message ? res.message.content : res;
     if (Array.isArray(content)) content = content.map((c) => c.text || '').join('');
     return parseShotList(String(content), nShots);
   }
 
-  async function pollinationsShotList(idea, nShots) {
+  async function pollinationsShotList(idea, nShots, lengthSec) {
     const res = await fetch(TEXT_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'openai',
-        messages: [{ role: 'user', content: shotPrompt(idea, nShots) }],
+        messages: [{ role: 'user', content: shotPrompt(idea, nShots, lengthSec) }],
         response_format: { type: 'json_object' },
       }),
       signal: timeout(35000),
@@ -92,7 +116,7 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"prompt":"...","se
       const s = (parts[i % parts.length] + variants[Math.floor(i / parts.length) % variants.length]).trim();
       shots.push({ prompt: `${s}, photorealistic, vertical 9:16 photo`, search: s, caption: '' });
     }
-    return { templateId: null, hook: null, shots };
+    return { edit: null, hook: null, shots };
   }
 
   // ---------- pictures ----------
@@ -175,13 +199,13 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"prompt":"...","se
   }
 
   // images: 'ai' | 'stock'
-  async function create(idea, nShots, onStatus, images) {
+  async function create(idea, nShots, onStatus, images, lengthSec) {
     const useAI = images === 'ai' && hasPuter() && puter.auth.isSignedIn();
-    onStatus('✍️ AI is writing the shot list…');
+    onStatus('✍️ AI is writing and editing the story…');
     let plan = null;
     for (const attempt of [useAI && puterShotList, pollinationsShotList]) {
       if (!attempt) continue;
-      try { plan = await attempt(idea, nShots); plan.byAI = true; break; } catch (e) { /* next */ }
+      try { plan = await attempt(idea, nShots, lengthSec); plan.byAI = true; break; } catch (e) { /* next */ }
     }
     if (!plan) { plan = localShotList(idea, nShots); plan.byAI = false; }
 
@@ -197,7 +221,10 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"prompt":"...","se
       }
       if (!r) r = await stockPhoto(shot.search, used, fallback);
       onStatus(`${useAI ? '🎨 Creating AI images' : '🔎 Finding photos'} ${++done}/${total}…`);
-      return r && Object.assign(r, { caption: shot.caption, query: shot.search });
+      return r && Object.assign(r, {
+        caption: shot.caption, query: shot.search,
+        shot: { sec: shot.sec, move: shot.move, trans: shot.trans, look: shot.look, drop: !!shot.drop },
+      });
     });
     plan.photos = results.filter(Boolean);
     plan.creditsRanOut = useAI && !aiOk;

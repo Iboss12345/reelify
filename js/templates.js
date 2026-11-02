@@ -206,8 +206,84 @@ window.Director = (function () {
     aesthetic: ['aesthetic', 'soft', 'dreamy', 'pastel', 'cozy', 'cosy', 'calm', 'chill', 'romantic', 'wedding', 'rewind'],
   };
 
-  // fallbackId: template to use when the text names no format (e.g. the AI's suggestion).
-  function parseStyle(text, stats, fallbackId) {
+  // ---------- custom edits (no format picked: built only from what the user describes) ----------
+
+  const LOOKS = {
+    natural: { grade: 'contrast(1.06) saturate(1.1)' },
+    vivid: { grade: 'contrast(1.15) saturate(1.45)' },
+    dark: { grade: 'brightness(0.78) contrast(1.2) saturate(0.75)', tone: 'cool' },
+    bw: { grade: 'grayscale(1) contrast(1.25)' },
+    vintage: { grade: 'sepia(0.45) contrast(1.1) saturate(0.9)', tone: 'warm' },
+    warm: { grade: 'saturate(1.3) contrast(1.05)', tone: 'warm' },
+    cool: { grade: 'saturate(0.9) contrast(1.2) brightness(0.92)', tone: 'cool' },
+    cinematic: { grade: 'contrast(1.12) saturate(1.15)', tone: 'tealorange' },
+    dreamy: { grade: 'brightness(1.06) saturate(0.85) contrast(0.94)', tone: 'warm' },
+  };
+  const MOVES = ['drift', 'pullback', 'pan', 'rise', 'tilt', 'velocity', 'punch', 'still'];
+  const TRANS = ['cut', 'zoom', 'spin', 'whip', 'whipUp', 'flash', 'flare', 'shake', 'glitch', 'dissolve'];
+  const FX = ['bloom', 'grain', 'vignette', 'glow', 'rgb', 'rgbMotion', 'glitch'];
+  const MUSIC = ['drop', 'phonk', 'pop', 'cinematic', 'dreamy'];
+  const TEXT_STYLES = ['outline', 'box', 'minimal', 'big', 'cinema'];
+  const BY_ENERGY = {
+    low: { bpm: 84, music: 'dreamy', moves: ['drift', 'pullback', 'rise'], transitions: ['dissolve', 'flare'], fx: ['grain', 'vignette'], pulse: null },
+    medium: { bpm: 108, music: 'pop', moves: ['drift', 'pan', 'punch'], transitions: ['zoom', 'whip', 'cut'], fx: ['grain', 'vignette'], pulse: { amp: 0.02, every: 2 } },
+    high: { bpm: 130, music: 'drop', moves: ['punch', 'velocity', 'tilt'], transitions: ['zoom', 'whip', 'flash', 'shake'], fx: ['rgbMotion', 'grain', 'vignette'], pulse: { amp: 0.05, shake: 10, every: 1, fromDrop: true } },
+  };
+  const oneOf = (v, list, dflt) => (list.includes(v) ? v : dflt);
+  const someOf = (v, list) => { const a = (Array.isArray(v) ? v : []).filter((x) => list.includes(x)); return a.length ? a : null; };
+  const rand = (a) => a[Math.floor(Math.random() * a.length)];
+
+  // Colour filter for one shot, e.g. a dark "before" shot then a vivid reveal.
+  const look = (name) => (LOOKS[name] ? LOOKS[name].grade : null);
+
+  // edit: the AI's design ({energy, music, bpm, look, layout, textStyle, transitions, moves, fx, hook}).
+  // story: shots keep their order and their own timing / move / transition (for "Just describe it").
+  // remix: same story and timing, but a fresh camera, transitions, look and music.
+  function custom(edit = {}, { story = false, remix = false } = {}) {
+    const energy = oneOf(edit.energy, ['low', 'medium', 'high'], 'medium');
+    const E = BY_ENERGY[energy];
+    const lookName = remix ? rand(Object.keys(LOOKS)) : oneOf(edit.look, Object.keys(LOOKS), 'natural');
+    const tpl = clone({
+      id: 'custom', name: 'Custom edit', emoji: '✨', desc: 'Designed only from your description.',
+      story, followShots: !remix,
+      bpm: Math.max(70, Math.min(150, Math.round(+edit.bpm || E.bpm))), beats: 2, videoBeats: 4,
+      moves: (!remix && someOf(edit.moves, MOVES)) || E.moves,
+      transitions: (!remix && someOf(edit.transitions, TRANS)) || E.transitions,
+      dropTransition: 'flash',
+      pulse: E.pulse,
+      grade: LOOKS[lookName].grade, tone: LOOKS[lookName].tone || null,
+      layout: edit.layout === 'letterbox' ? 'letterbox' : 'full',
+      fx: someOf(edit.fx, FX) || E.fx,
+      textStyle: remix ? rand(TEXT_STYLES) : oneOf(edit.textStyle, TEXT_STYLES, 'box'),
+      hook: edit.hook || '', hookMode: edit.hook ? 'intro' : 'none', hookAnim: 'words',
+      music: remix ? rand(MUSIC) : oneOf(edit.music, MUSIC, E.music),
+    });
+    tpl.hooks = tpl.hook ? [tpl.hook] : [];
+    tpl.energy = energy; tpl.lookName = lookName;
+    return tpl;
+  }
+
+  // Offline guess at a custom edit from the words in a description (when the AI is unavailable).
+  function guess(text) {
+    const s = ' ' + text.toLowerCase() + ' ';
+    const any = (words) => words.some((w) => s.includes(w));
+    const energy = any(['fast', 'hype', 'energetic', 'gym', 'workout', 'jacked', 'sport', 'party', 'intense', 'epic', 'crazy', 'glow up', 'transformation', 'fight', 'race'])
+      ? 'high'
+      : any(['calm', 'chill', 'sad', 'soft', 'slow', 'cozy', 'cosy', 'peaceful', 'dreamy', 'romantic', 'lonely', 'quiet', 'relax'])
+        ? 'low' : 'medium';
+    const lookName = any(['black and white', 'b&w', 'monochrome']) ? 'bw'
+      : any(['vintage', 'retro', '90s', '80s', 'nostalgic']) ? 'vintage'
+        : any(['cinematic', 'movie', 'film']) ? 'cinematic'
+          : any(['dark', 'night', 'sad', 'moody', 'horror', 'scary']) ? 'dark'
+            : any(['dreamy', 'soft', 'pastel']) ? 'dreamy'
+              : any(['warm', 'sunset', 'summer', 'golden']) ? 'warm'
+                : any(['vibrant', 'colorful', 'colourful', 'neon']) ? 'vivid' : 'natural';
+    return { energy, look: lookName, layout: any(['cinematic', 'movie', 'widescreen']) ? 'letterbox' : 'full' };
+  }
+
+  // fallback: template id (e.g. the AI's suggestion) or a template object to use when the text
+  // names no format.
+  function parseStyle(text, stats, fallback) {
     const s = ' ' + text.toLowerCase() + ' ';
     // "no glitch" / "don't add shaky stuff" shouldn't count as asking for it.
     const negated = (w) => new RegExp(`\\b(no|not|don'?t|without|less)\\s+(\\w+\\s+){0,2}${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`).test(s);
@@ -223,8 +299,11 @@ window.Director = (function () {
     if (bestId) {
       tpl = clone(byId(bestId));
       notes.push(`Your description sounds like a "${tpl.name}" edit, so I used that as the base.`);
-    } else if (fallbackId && byId(fallbackId)) {
-      tpl = clone(byId(fallbackId));
+    } else if (fallback && typeof fallback === 'object') {
+      tpl = fallback;
+      notes.push('No format named, so this edit is built only from what you described.');
+    } else if (fallback && byId(fallback)) {
+      tpl = clone(byId(fallback));
       notes.push(`The AI director chose a "${tpl.name}" edit for this idea.`);
     } else {
       const pick = autoPick(stats);
@@ -297,5 +376,5 @@ window.Director = (function () {
     return { template: tpl, reasons: notes.concat(reasons) };
   }
 
-  return { autoPick, parseStyle, byId, clone };
+  return { autoPick, parseStyle, byId, clone, custom, guess, look };
 })();
