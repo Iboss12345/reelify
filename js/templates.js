@@ -257,6 +257,7 @@ window.Director = (function () {
       textStyle: remix ? rand(TEXT_STYLES) : oneOf(edit.textStyle, TEXT_STYLES, 'box'),
       hook: edit.hook || '', hookMode: edit.hook ? 'intro' : 'none', hookAnim: 'words',
       music: remix ? rand(MUSIC) : oneOf(edit.music, MUSIC, E.music),
+      musicPrompt: !remix && typeof edit.musicPrompt === 'string' ? edit.musicPrompt.slice(0, 300) : null,
     });
     tpl.hooks = tpl.hook ? [tpl.hook] : [];
     tpl.energy = energy; tpl.lookName = lookName;

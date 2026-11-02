@@ -45,6 +45,7 @@
         </div>
         <ul id="thumbs" class="thumbs"></ul>
         <p class="hint" id="thumbHint" hidden>Drag to reorder, × to remove.</p>
+        <div id="captionList" class="caplist" hidden></div>
       </div>
 
       <div class="step">
@@ -103,10 +104,12 @@
         </label>
         <div class="field">Music
           <div class="seg">
-            <label><input type="radio" name="music" value="beat" checked> AI beat</label>
+            <label><input type="radio" name="music" value="ai"> 🧠 AI-composed</label>
+            <label><input type="radio" name="music" value="beat" checked> Quick beat</label>
             <label><input type="radio" name="music" value="song"> My song</label>
             <label><input type="radio" name="music" value="none"> Silent</label>
           </div>
+          <p class="hint" id="aiMusicHint" hidden>A real music AI (MusicGen) composes a new track that fits your video. Free, but the first time it downloads ~600 MB, and composing takes a few minutes. Best on a computer.</p>
           <div id="songRow" class="songrow" hidden>
             <input id="songFile" type="file" accept="audio/*">
             <label>Start at <input id="songOffset" type="number" min="0" step="0.5" value="0"> sec</label>
@@ -146,6 +149,7 @@
   <script src="js/renderer.js"></script>
   <script src="js/creator.js"></script>
   <script src="js/depth.js"></script>
+  <script src="js/composer.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

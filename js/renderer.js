@@ -430,6 +430,66 @@ window.Renderer = (function () {
     return 1 + (c1 + 1) * x * x * x + c1 * x * x;
   }
 
+  // Shot captions, TikTok style: 1–3 words at a time, big bold white with a thick outline, the
+  // word being "said" lights up yellow (karaoke), each chunk pops in. Cinema/minimal stay subtitles.
+  const EMOJI = /\p{Extended_Pictographic}/u;
+  function drawCaption(ctx, text, lt, dur, style) {
+    if (style === 'cinema' || style === 'minimal') { drawText(ctx, text, H * 0.8, style, lt - 0.05, 'fade'); return; }
+    // Emoji stick to the word before them; words split into even groups of 2–3.
+    const words = [];
+    text.replace(/\*/g, '').split(/\s+/).filter(Boolean).forEach((w) => {
+      if (words.length && !/[\p{L}\p{N}]/u.test(w)) words[words.length - 1] += ' ' + w; else words.push(w);
+    });
+    if (!words.length) return;
+    const chunks = [], nChunks = Math.ceil(words.length / 3);
+    for (let c = 0, i = 0; c < nChunks; c++) {
+      const n = Math.round((words.length - i) / (nChunks - c));
+      chunks.push(words.slice(i, i + n));
+      i += n;
+    }
+    const span = Math.max(0.3, (dur - 0.08) / chunks.length);
+    const ci = Math.min(chunks.length - 1, Math.floor(Math.max(0, lt) / span));
+    const chunk = chunks[ci], ct = lt - ci * span;
+    const active = Math.min(chunk.length - 1, Math.floor(ct / (span / chunk.length)));
+    const pop = popIn(ct + 0.02);
+    if (pop <= 0) return;
+
+    ctx.save();
+    let px = 78;
+    ctx.font = `900 ${px}px ${FONT}`;
+    const space = ctx.measureText(' ').width;
+    let widths = chunk.map((w) => ctx.measureText(w).width);
+    let total = widths.reduce((a, b) => a + b, 0) + space * (chunk.length - 1);
+    if (total > W * 0.88) { // shrink long chunks to fit
+      px = Math.floor(px * (W * 0.88) / total);
+      ctx.font = `900 ${px}px ${FONT}`;
+      const k = px / 78;
+      widths = widths.map((w) => w * k);
+      total *= k;
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    const y = H * 0.68;
+    ctx.translate(W / 2, y); ctx.scale(pop, pop); ctx.translate(-W / 2, -y);
+    let x = W / 2 - total / 2;
+    chunk.forEach((w, i) => {
+      const cx = x + widths[i] / 2, on = i === active;
+      ctx.save();
+      ctx.translate(cx, y);
+      if (on) ctx.scale(1.1, 1.1);
+      ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+      ctx.lineWidth = px * 0.2; ctx.strokeStyle = '#000';
+      ctx.textAlign = 'left';
+      const letters = w.split(EMOJI)[0]; // outline the letters, not the emoji after them
+      if (letters.trim()) ctx.strokeText(letters, -widths[i] / 2, 0);
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = on ? '#ffe14d' : '#fff';
+      ctx.fillText(w, -widths[i] / 2, 0);
+      ctx.restore();
+      x += widths[i] + space;
+    });
+    ctx.restore();
+  }
+
   // anim: 'pop' (all at once), 'words' (word-by-word), 'fade'
   function drawText(ctx, text, y, styleName, age, anim = 'pop', size) {
     if (!text || age <= 0) return;
@@ -623,8 +683,7 @@ window.Renderer = (function () {
       if (t < hookEnd) drawText(ctx, plan.hook, tpl.layout === 'polaroid' ? H * 0.09 : H * 0.2, style, t - start, tpl.hookAnim);
     }
     if (seg.m.caption) {
-      // Story caption for this shot (from "Just describe it").
-      drawText(ctx, seg.m.caption, H * 0.78, style === 'cinema' || style === 'minimal' ? style : 'box', lt - 0.05, 'words');
+      drawCaption(ctx, seg.m.caption, lt, seg.dur, style);
     } else if (tpl.labels === 'countdown') {
       drawText(ctx, '#' + (plan.count - (seg.idx % plan.count)), H * 0.74, 'big', lt, 'pop', 150);
     } else if (tpl.labels === 'beforeafter') {

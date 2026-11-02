@@ -193,8 +193,34 @@
       ul.appendChild(li);
     });
     $('#thumbHint').hidden = list.length < 2;
+    renderCaptions(list);
     $('#newPhotos').hidden = state.source !== 'describe' || !state.found.length;
     updateButtons();
+  }
+
+  // One text box per shot so captions can be fixed or added (changes show on the next play).
+  function renderCaptions(list) {
+    const box = $('#captionList');
+    box.innerHTML = '';
+    box.hidden = !list.length;
+    if (!list.length) return;
+    const h = document.createElement('h3');
+    h.textContent = '💬 Captions (edit, add or clear them)';
+    box.appendChild(h);
+    list.forEach((m, i) => {
+      const row = document.createElement('label');
+      row.className = 'caprow';
+      const vis = document.createElement(m.type === 'video' ? 'video' : 'img');
+      vis.src = m.type === 'video' ? `${m.url}#t=0.1` : m.url;
+      if (m.type === 'video') vis.muted = true;
+      const input = document.createElement('input');
+      input.value = m.caption || '';
+      input.placeholder = `Shot ${i + 1} caption (optional)`;
+      input.maxLength = 80;
+      input.oninput = () => { m.caption = input.value.trim(); if (state.plan && !player.running) player.draw(0.05); };
+      row.append(vis, input);
+      box.appendChild(row);
+    });
   }
 
   // Pictures dragged from another website: only works if that site allows it (CORS).
@@ -280,7 +306,10 @@
 
   const musicMode = () => $('input[name=music]:checked').value;
   $$('input[name=music]').forEach((r) => {
-    r.onchange = () => { $('#songRow').hidden = musicMode() !== 'song'; };
+    r.onchange = () => {
+      $('#songRow').hidden = musicMode() !== 'song';
+      $('#aiMusicHint').hidden = musicMode() !== 'ai';
+    };
   });
 
   $('#songFile').onchange = (e) => {
@@ -292,6 +321,7 @@
 
   function audioOpts() {
     const mode = musicMode();
+    if (mode === 'ai') return state.aiSong ? { song: state.aiSong } : { music: true };
     if (mode === 'song') {
       if (!state.song) { toast('Choose a song file, or switch music to "AI beat".'); return { music: false }; }
       state.song.offset = parseFloat($('#songOffset').value) || 0;
@@ -391,6 +421,18 @@
     });
     state.lastTplId = tpl.id;
     state.lastHook = state.plan.hook;
+
+    // Machine-learning music, composed for this edit's style and length.
+    state.aiSong = null;
+    if (musicMode() === 'ai') {
+      state.busy = true; updateButtons();
+      try {
+        state.aiSong = await Composer.compose(tpl, state.plan.total, status);
+      } catch (e) {
+        console.warn(e);
+        toast("The AI composer couldn't run in this browser, so it's using the quick beat.");
+      } finally { state.busy = false; status(''); updateButtons(); }
+    }
     player.load(state.plan);
     $('#empty').hidden = true;
     const reasons = res.reasons.slice();
@@ -403,8 +445,9 @@
     if (useLayers && list.some((m) => m.layers && !m.layers.off)) {
       reasons.push('🧠 Machine learning measured the depth in every photo, so the camera moves through it in real 3D.');
     }
+    if (state.aiSong) reasons.push(`🎵 Music composed by AI: "${Composer.promptFor(tpl)}".`);
     if (tpl.id === 'custom') {
-      reasons.push(`Music: ${tpl.music} at ${tpl.bpm} BPM · look: ${tpl.lookName} · energy: ${tpl.energy}.`);
+      reasons.push(`Style: ${tpl.music} at ${tpl.bpm} BPM · look: ${tpl.lookName} · energy: ${tpl.energy}.`);
       if (state.plan.dropTime != null) reasons.push(`The beat builds up and drops at ${state.plan.dropTime.toFixed(1)}s, where the story turns.`);
     }
     renderNotes(reasons);

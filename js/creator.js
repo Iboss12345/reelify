@@ -41,11 +41,12 @@ Design the edit ONLY from this idea: pacing, camera, transitions, colour and mus
    - "layout": full | letterbox
    - "textStyle": outline | box | minimal | big | cinema
    - "fx": any of bloom, grain, vignette, glow, rgb, rgbMotion, glitch
+   - "musicPrompt": a vivid description for an AI music generator: genre, instruments, mood, tempo in bpm (same as "bpm"), and how it builds; no vocals. E.g. "dark phonk, heavy distorted 808 bass, cowbell melody, aggressive drums, 125 bpm, builds to a hard drop"
 3. If there is a main character, describe them once in detail (age, build, hair, clothes) and repeat that exact description inside every image prompt so they look the same in every shot.
 4. "shots": exactly ${nShots} shots that tell the story in order. For each shot:
    - "prompt": a detailed image-generation prompt (subject, action, setting, lighting, camera angle), ending with "photorealistic, vertical 9:16 photo"
    - "search": 2-4 plain words to find a similar stock photo
-   - "caption": on-screen story text, max 6 words (e.g. "day 1", "they laughed at me"), or "" for none
+   - "caption": on-screen text like a viral storytime TikTok: first person, casual, lowercase, 2-7 words, adds feeling or a twist instead of describing what's visible, the captions read together as one gripping story, at most one emoji in the whole video's captions. Good: "they called me lazy", "so i stopped talking", "day 1. couldn't do one pushup", "now they ask me for tips". Bad: "a boy playing video games", "working out at the gym". Use "" when silence hits harder.
    - "seconds": how long the shot stays on screen. ${timing}
    - "move": camera move: drift | pullback | pan | rise | tilt | velocity (slow creep then hard zoom) | punch (impact zoom) | still
    - "transition": how this shot comes in: cut | zoom | spin | whip | whipUp | flash | flare | shake | glitch | dissolve

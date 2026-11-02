@@ -95,7 +95,12 @@ textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: 
 .tplgrid button.active { border-color: var(--accent); background: rgba(255, 61, 127, .12); }
 
 .srcpane { margin-top: 12px; }
-.check { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
+.caplist { margin-top: 14px; display: grid; gap: 6px; }
+.caplist h3 { margin: 0 0 2px; font-size: 13px; color: var(--muted); font-weight: 700; }
+.caprow { display: flex; gap: 8px; align-items: center; }
+.caprow img, .caprow video { width: 30px; height: 44px; object-fit: cover; border-radius: 6px; flex: none; }
+.caprow input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+.check {display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; }
 .check input { margin-top: 3px; accent-color: var(--accent); }
 .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .row2 .field + .field { margin-top: 0; }
