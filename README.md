@@ -15,7 +15,7 @@ Everything runs in the browser: no server, no account, no cost.
 - `js/templates.js`: 10 templates based on trending CapCut/Reels edit styles (Velocity, Beat Drop, 3D Photo Zoom, Photo Flash, POV, Glow Up, Cinematic, Top List, Glitch, Soft Aesthetic), the "AI director" that picks one from your media, and the free keyword-based style matcher.
 - `js/renderer.js`: plans the edit on the beat and draws it with a virtual camera: speed-ramp zooms, spin/whip/zoom transitions with real motion blur, fake 3D depth, beat pulses and shake, RGB split, glitch, light leaks, bloom, film grain, word-by-word captions. Then records the video.
 - `js/music.js`: generates a royalty-free track (EDM build + drop, phonk, pop, cinematic, lo-fi) with reverb and sidechain, locked to the cuts.
-- `js/creator.js`: "Just describe it" mode: AI shot list (free Pollinations text API, keyword fallback) + Wikimedia Commons photo search.
+- `js/creator.js`: "Just describe it" mode: AI writes the story shot by shot with captions (Puter.js chat, Pollinations fallback, keyword fallback), then AI images per shot via Puter.js (users sign in to their own free Puter account) or Wikimedia Commons stock photos.
 - `js/app.js`: page controls.
 
 ## Notes

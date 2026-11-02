@@ -33,8 +33,14 @@
         </div>
         <div class="srcpane" data-src="describe" hidden>
           <textarea id="idea" rows="3" placeholder="e.g. a day in Tokyo: neon streets at night, ramen, cherry blossoms, Mount Fuji at sunrise"></textarea>
-          <p class="hint">No photos needed. The AI writes a shot list and finds a free photo for each shot.</p>
-          <button id="newPhotos" class="btn small" hidden>🔄 Find different photos</button>
+          <label class="field">Pictures
+            <select id="imageSource">
+              <option value="ai">🎨 AI-generated to match your story (free Puter sign-in)</option>
+              <option value="stock">📷 Real stock photos (no sign-in, best for places/food/things)</option>
+            </select>
+          </label>
+          <p class="hint">No photos needed. The AI writes the story shot by shot, with captions, and makes a picture for each shot.</p>
+          <button id="newPhotos" class="btn small" hidden>🔄 Make different pictures</button>
         </div>
         <ul id="thumbs" class="thumbs"></ul>
         <p class="hint" id="thumbHint" hidden>Drag to reorder, × to remove.</p>
@@ -123,6 +129,7 @@
         <div class="bar"><div></div></div>
         <span>Recording… keep this tab open and visible</span>
       </div>
+      <button id="sheet" class="btn small wide" disabled>🖼️ Copy frames to show Claude</button>
       <div id="status" class="status" hidden></div>
       <div id="notes" class="notes" hidden></div>
     </section>
@@ -131,6 +138,7 @@
   <div id="media-pool" aria-hidden="true"></div>
   <div id="toast" class="toast" hidden></div>
 
+  <script src="https://js.puter.com/v2/" async></script>
   <script src="js/templates.js"></script>
   <script src="js/music.js"></script>
   <script src="js/renderer.js"></script>

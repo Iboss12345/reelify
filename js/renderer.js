@@ -595,7 +595,10 @@ window.Renderer = (function () {
       const start = tpl.layout === 'letterbox' ? 0.6 : 0.05;
       if (t < hookEnd) drawText(ctx, plan.hook, tpl.layout === 'polaroid' ? H * 0.09 : H * 0.2, style, t - start, tpl.hookAnim);
     }
-    if (tpl.labels === 'countdown') {
+    if (seg.m.caption) {
+      // Story caption for this shot (from "Just describe it").
+      drawText(ctx, seg.m.caption, H * 0.78, style === 'cinema' || style === 'minimal' ? style : 'box', lt - 0.05, 'words');
+    } else if (tpl.labels === 'countdown') {
       drawText(ctx, '#' + (plan.count - (seg.idx % plan.count)), H * 0.74, 'big', lt, 'pop', 150);
     } else if (tpl.labels === 'beforeafter') {
       drawText(ctx, seg.idx === 0 ? 'before' : 'after', H * 0.78, 'big', lt, 'pop', 90);

@@ -102,6 +102,8 @@ select {
   background: var(--panel-2); color: var(--text); font-weight: 500;
 }
 .btn.small { padding: 7px 12px; font-size: 13px; margin-top: 8px; }
+.btn.wide { width: 100%; }
+.srcpane .field { margin-top: 10px; }
 .status { margin-top: 12px; font-size: 14px; font-weight: 600; text-align: center; }
 .notes .credits { margin-top: 8px; font-size: 11px; color: var(--muted); }
 .notes .credits a { color: var(--muted); }

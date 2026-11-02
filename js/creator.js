@@ -1,8 +1,12 @@
-// "Describe it" mode: turns a text idea into a shot list (free AI, with an offline fallback)
-// and finds a free photo on Wikimedia Commons for every shot.
+// "Just describe it" mode: turns a text idea into a shot list with story captions, then makes a
+// picture for every shot: AI-generated through Puter.js (free for us; each user signs in to their
+// own free Puter account), or free stock photos from Wikimedia Commons as a backup.
 window.Creator = (function () {
   const TEXT_API = 'https://text.pollinations.ai/openai';
   const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
+  const IMAGE_OPTS = { provider: 'cloudflare', width: 768, height: 1344 };
+
+  const hasPuter = () => !!(window.puter && puter.ai && puter.auth);
 
   function timeout(ms) {
     const c = new AbortController();
@@ -10,48 +14,40 @@ window.Creator = (function () {
     return c.signal;
   }
 
-  // The free AI allows about one reply per 45s per person: wait once if it asks us to.
-  async function aiShotList(idea, nShots, onStatus, retried = false) {
-    try {
-      return await askAI(idea, nShots);
-    } catch (e) {
-      const wait = e.retryAfter;
-      if (retried || !wait || wait > 25) throw e;
-      onStatus(`✍️ AI is busy, retrying in ${wait}s…`);
-      await new Promise((r) => setTimeout(r, wait * 1000 + 500));
-      onStatus('✍️ AI is writing the shot list…');
-      return aiShotList(idea, nShots, onStatus, true);
-    }
+  // Must be called straight from a click, or the browser blocks the sign-in popup.
+  function signIn() {
+    if (!hasPuter()) return Promise.reject(new Error('Puter.js did not load'));
+    if (puter.auth.isSignedIn()) return Promise.resolve();
+    return puter.auth.signIn();
   }
 
-  async function askAI(idea, nShots) {
+  // ---------- shot list ----------
+
+  function shotPrompt(idea, nShots) {
     const templates = TEMPLATES.map((t) => `${t.id}: ${t.desc}`).join('\n');
-    const prompt = `You are directing a viral vertical Instagram Reel.
+    return `You are directing a viral vertical Instagram Reel made from ${nShots} still images.
 Video idea: "${idea}"
-Pick the best template id from:
+1. Pick the best template id from:
 ${templates}
-Write a scroll-stopping hook (max 8 words, wrap the key word in *stars*) and exactly ${nShots} shots in story order.
-For each shot give a photo search query for Wikimedia Commons: 2-4 plain words naming concrete things you can photograph (no style words like cinematic or aesthetic).
-Reply with JSON only: {"template":"id","hook":"...","shots":[{"search":"..."}]}`;
-    const res = await fetch(TEXT_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'openai',
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-      }),
-      signal: timeout(35000),
-    });
-    if (!res.ok) {
-      const err = new Error(`AI ${res.status}`);
-      const m = (await res.text().catch(() => '')).match(/Retry after (\d+)s/i);
-      if (m) err.retryAfter = +m[1];
-      throw err;
-    }
-    const txt = (await res.json()).choices[0].message.content;
+2. Write a scroll-stopping hook (max 8 words, wrap the key word in *stars*).
+3. If there is a main character, describe them once in detail (age, build, hair, clothes) and repeat that exact description inside every image prompt so they look the same in every shot.
+4. Write exactly ${nShots} shots that tell the story in order. For each shot:
+   - "prompt": a detailed image-generation prompt (subject, action, setting, lighting, camera angle), ending with "photorealistic, vertical 9:16 photo"
+   - "search": 2-4 plain words to find a similar stock photo
+   - "caption": on-screen story text, max 6 words (e.g. "day 1", "they laughed at me")
+Reply with JSON only: {"template":"id","hook":"...","shots":[{"prompt":"...","search":"...","caption":"..."}]}`;
+  }
+
+  function parseShotList(txt, nShots) {
     const json = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
-    const shots = (json.shots || []).map((s) => String(s.search || s).trim()).filter(Boolean).slice(0, nShots);
+    const shots = (json.shots || []).map((s) => (typeof s === 'string' ? { prompt: s, search: s } : s))
+      .filter((s) => s && (s.prompt || s.search))
+      .slice(0, nShots)
+      .map((s) => ({
+        prompt: String(s.prompt || s.search),
+        search: String(s.search || s.prompt).split(/\s+/).slice(0, 5).join(' '),
+        caption: s.caption ? String(s.caption).slice(0, 60) : '',
+      }));
     if (!shots.length) throw new Error('empty shot list');
     return {
       templateId: TEMPLATES.some((t) => t.id === json.template) ? json.template : null,
@@ -60,20 +56,74 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"search":"..."}]}`
     };
   }
 
+  async function puterShotList(idea, nShots) {
+    const res = await puter.ai.chat(shotPrompt(idea, nShots));
+    let content = res && res.message ? res.message.content : res;
+    if (Array.isArray(content)) content = content.map((c) => c.text || '').join('');
+    return parseShotList(String(content), nShots);
+  }
+
+  async function pollinationsShotList(idea, nShots) {
+    const res = await fetch(TEXT_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'openai',
+        messages: [{ role: 'user', content: shotPrompt(idea, nShots) }],
+        response_format: { type: 'json_object' },
+      }),
+      signal: timeout(35000),
+    });
+    if (!res.ok) throw new Error(`AI ${res.status}`);
+    return parseShotList((await res.json()).choices[0].message.content, nShots);
+  }
+
   // Offline fallback: split the idea into phrases and strip style words.
-  const FILLER = /\b(fast|slow|quick|hype|cinematic|aesthetic|velocity|glitch|edit|video|reel|tiktok|instagram|viral|vibes?|style|transitions?|music|beat|drop|vintage|retro|warm|cool|make|a|an|the|of|my|me|about|showing|that|is|in|on|to|for|some|lots|it)\b/gi;
+  const FILLER = /\b(fast|slow|quick|hype|cinematic|aesthetic|velocity|glitch|edit|video|reel|tiktok|instagram|viral|vibes?|style|transitions?|music|beat|drop|vintage|retro|warm|cool|make|i|want|wnat|to|show|a|an|the|of|my|me|about|showing|that|is|in|on|for|some|lots|it)\b/gi;
   function localShotList(idea, nShots) {
     const text = idea.replace(/["“”][^"“”]*["“”]/g, ' ');
-    let parts = text.split(/[,.;\n]|\band\b|\bthen\b|\bwith\b/i)
+    let parts = text.split(/[,.;\n]|\band\b|\bthen\b|\bhten\b|\bwith\b/i)
       .map((p) => p.replace(FILLER, ' ').replace(/\s+/g, ' ').trim())
       .filter((p) => p.length > 2);
     if (!parts.length) parts = ['city skyline'];
-    const variants = ['', ' close up', ' landscape', ' night', ' detail', ' people'];
+    const variants = ['', ' close up', ' wide shot', ' at night', ' detail', ' people'];
     const shots = [];
     for (let i = 0; shots.length < nShots; i++) {
-      shots.push((parts[i % parts.length] + variants[Math.floor(i / parts.length) % variants.length]).trim());
+      const s = (parts[i % parts.length] + variants[Math.floor(i / parts.length) % variants.length]).trim();
+      shots.push({ prompt: `${s}, photorealistic, vertical 9:16 photo`, search: s, caption: '' });
     }
     return { templateId: null, hook: null, shots };
+  }
+
+  // ---------- pictures ----------
+
+  function loadImage(url, cors = true) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      if (cors) img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  // The canvas recorder needs pictures it's allowed to read, so re-load them safely.
+  async function canvasSafe(src) {
+    if (src.startsWith('data:') || src.startsWith('blob:')) return loadImage(src, false);
+    try { return await loadImage(src); } catch (e) { /* no CORS, try fetching */ }
+    const blob = await (await fetch(src)).blob();
+    return loadImage(URL.createObjectURL(blob), false);
+  }
+
+  async function aiImage(prompt) {
+    let img;
+    try {
+      img = await puter.ai.txt2img(prompt, IMAGE_OPTS);
+    } catch (e) {
+      if (/insufficient_funds|402/i.test(JSON.stringify(e))) throw Object.assign(new Error('out of credits'), { credits: true });
+      img = await puter.ai.txt2img(prompt, { width: 768, height: 1344 }); // any provider
+    }
+    return canvasSafe(img.src);
   }
 
   async function searchCommons(query) {
@@ -97,17 +147,7 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"search":"..."}]}`
     }));
   }
 
-  function loadImage(url) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => resolve(img);
-      img.onerror = reject;
-      img.src = url;
-    });
-  }
-
-  async function findPhoto(query, used, fallback) {
+  async function stockPhoto(query, used, fallback) {
     // Wikimedia's reviewed "Quality images" first, then everything.
     // (Single words are too ambiguous for the small quality set, e.g. "ramen" is Dutch for windows.)
     const tries = [query, query.split(' ').slice(0, 2).join(' '), fallback];
@@ -119,33 +159,51 @@ Reply with JSON only: {"template":"id","hook":"...","shots":[{"search":"..."}]}`
       for (const c of candidates.slice(0, 5)) {
         if (used.has(c.id)) continue;
         used.add(c.id);
-        try { return { el: await loadImage(c.url), credit: c, query }; } catch (e) { /* try next */ }
+        try { return { el: await loadImage(c.url), credit: c }; } catch (e) { /* try next */ }
       }
     }
     return null;
   }
 
-  async function create(idea, nShots, onStatus) {
+  // Runs jobs a few at a time.
+  async function pool(items, limit, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    const worker = async () => { while (next < items.length) { const i = next++; out[i] = await fn(items[i], i); } };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return out;
+  }
+
+  // images: 'ai' | 'stock'
+  async function create(idea, nShots, onStatus, images) {
+    const useAI = images === 'ai' && hasPuter() && puter.auth.isSignedIn();
     onStatus('✍️ AI is writing the shot list…');
-    let plan;
-    try {
-      plan = await aiShotList(idea, nShots, onStatus);
-      plan.byAI = true;
-    } catch (e) {
-      plan = localShotList(idea, nShots);
-      plan.byAI = false;
+    let plan = null;
+    for (const attempt of [useAI && puterShotList, pollinationsShotList]) {
+      if (!attempt) continue;
+      try { plan = await attempt(idea, nShots); plan.byAI = true; break; } catch (e) { /* next */ }
     }
+    if (!plan) { plan = localShotList(idea, nShots); plan.byAI = false; }
+
     const used = new Set();
-    const fallback = localShotList(idea, 1).shots[0];
-    let done = 0;
-    onStatus(`🔎 Finding photos 0/${plan.shots.length}…`);
-    const results = await Promise.all(plan.shots.map((q) => findPhoto(q, used, fallback).then((r) => {
-      onStatus(`🔎 Finding photos ${++done}/${plan.shots.length}…`);
-      return r;
-    })));
+    const fallback = localShotList(idea, 1).shots[0].search;
+    let done = 0, aiOk = useAI;
+    const total = plan.shots.length;
+    onStatus(useAI ? `🎨 Creating AI images 0/${total}…` : `🔎 Finding photos 0/${total}…`);
+    const results = await pool(plan.shots, useAI ? 3 : 6, async (shot) => {
+      let r = null;
+      if (aiOk) {
+        try { r = { el: await aiImage(shot.prompt), ai: true }; } catch (e) { if (e.credits) aiOk = false; }
+      }
+      if (!r) r = await stockPhoto(shot.search, used, fallback);
+      onStatus(`${useAI ? '🎨 Creating AI images' : '🔎 Finding photos'} ${++done}/${total}…`);
+      return r && Object.assign(r, { caption: shot.caption, query: shot.search });
+    });
     plan.photos = results.filter(Boolean);
+    plan.creditsRanOut = useAI && !aiOk;
+    plan.usedAIImages = plan.photos.some((p) => p.ai);
     return plan;
   }
 
-  return { create };
+  return { create, signIn, hasPuter };
 })();
